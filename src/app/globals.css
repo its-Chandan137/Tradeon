@@ -1,26 +1,93 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* base shadcn-style tokens, properly wrapped in hsl() */
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  /* custom Tradeon tokens, migrated from tailwind.config.ts */
+  --color-gold: #D4AF37;
+  --color-gold-bright: #F0B429;
+  --color-gold-muted: #B8942B;
+
+  --color-loss: #C86B62;
+  --color-loss-muted: #8F4B45;
+
+  --color-profit: #F0B429;
+  --color-profit-green: #72C879;
+
+  --color-surface: #13161C;
+  --color-surface-raised: #181C24;
+  --color-surface-muted: #0F1217;
+
+  --radius-sm: 0.45rem;
+  --radius-md: 0.65rem;
+  --radius-lg: 0.85rem;
+
+  --shadow-terminal: 0 24px 80px rgba(0, 0, 0, 0.35);
+  --shadow-glow: 0 0 0 1px rgba(212, 175, 55, 0.18), 0 0 32px rgba(212, 175, 55, 0.08);
+
+  --font-sans: var(--font-geist-sans), Inter, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --background: 228 18% 4%;
+  --foreground: 48 10% 91%;
+  --card: 228 19% 8%;
+  --card-foreground: 48 10% 91%;
+  --popover: 228 19% 8%;
+  --popover-foreground: 48 10% 91%;
+  --primary: 43 74% 52%;
+  --primary-foreground: 228 18% 4%;
+  --secondary: 228 13% 13%;
+  --secondary-foreground: 48 10% 91%;
+  --muted: 228 13% 13%;
+  --muted-foreground: 48 4% 62%;
+  --accent: 43 74% 52%;
+  --accent-foreground: 228 18% 4%;
+  --destructive: 0 51% 55%;
+  --destructive-foreground: 48 10% 91%;
+  --border: 228 12% 15%;
+  --input: 228 12% 15%;
+  --ring: 43 74% 52%;
+  --radius: 0.75rem;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  height: 100%;
+  background-color: #0B0E11;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100%;
+  background-color: #0B0E11;
+  color: hsl(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular-finance {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
