@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useWatch, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Upload, X } from "lucide-react";
+import { Upload, X, Loader2, Sparkles } from "lucide-react";
+import Tesseract from "tesseract.js";
 import { createTrade } from "@/lib/actions/trades";
 import { createClient } from "@/lib/supabase/client";
 import { calculateGenericProfitLoss, calculateRiskReward, formatCurrency, getInstrumentMultiplier } from "@/lib/utils";
@@ -50,6 +51,7 @@ function isUsingDefaultMultiplier(instrument: string | undefined) {
 
 export function TradeForm({ accounts }: TradeFormProps) {
   const [error, setError] = useState<string | null>(null);
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotName, setScreenshotName] = useState<string | null>(null);
   const [screenshotPreviewUrl, setScreenshotPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -57,6 +59,9 @@ export function TradeForm({ accounts }: TradeFormProps) {
   const [isPending, startTransition] = useTransition();
   const [knownInstruments, setKnownInstruments] = useState(commonInstruments);
   const [customInstrument, setCustomInstrument] = useState("");
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractedFields, setExtractedFields] = useState<Set<string>>(new Set());
+  const [extractionSummary, setExtractionSummary] = useState<string | null>(null);
 
   const form = useForm<TradeFormValues>({
     resolver: zodResolver(tradeSchema),
@@ -152,7 +157,35 @@ export function TradeForm({ accounts }: TradeFormProps) {
     };
   }, [screenshotPreviewUrl]);
 
-  async function uploadScreenshot(file: File) {
+  async function uploadScreenshotToDrive(file: File, userId: string, instrument: string, tradeType: string, tradeDate: string): Promise<string | null> {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("userId", userId);
+      formData.append("instrument", instrument);
+      formData.append("tradeType", tradeType);
+      formData.append("tradeDate", tradeDate);
+
+      const response = await fetch("/api/upload-screenshot", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.warn("Google Drive upload failed:", error.error);
+        return null;
+      }
+
+      const data = await response.json();
+      return data.screenshotUrl;
+    } catch (error) {
+      console.warn("Google Drive upload error:", error);
+      return null;
+    }
+  }
+
+  async function uploadScreenshotToSupabase(file: File): Promise<string> {
     const supabase = createClient();
     const user = await supabase.auth.getUser();
 
@@ -182,7 +215,7 @@ export function TradeForm({ accounts }: TradeFormProps) {
       throw signedUrlError;
     }
 
-    form.setValue("screenshotUrl", data.signedUrl);
+    return data.signedUrl;
   }
 
   function handleScreenshotChange(file: File | undefined) {
@@ -199,24 +232,18 @@ export function TradeForm({ accounts }: TradeFormProps) {
       URL.revokeObjectURL(screenshotPreviewUrl);
     }
 
+    setScreenshotFile(file);
     setScreenshotPreviewUrl(URL.createObjectURL(file));
     setScreenshotName(file.name);
     setError(null);
-    setIsUploading(true);
-
-    uploadScreenshot(file)
-      .catch((uploadError) => {
-        setError(uploadError instanceof Error ? uploadError.message : "Screenshot upload failed.");
-        removeScreenshot();
-      })
-      .finally(() => {
-        setIsUploading(false);
-      });
   }
 
   function removeScreenshot() {
+    setScreenshotFile(null);
     form.setValue("screenshotUrl", null);
     setScreenshotName(null);
+    setExtractedFields(new Set());
+    setExtractionSummary(null);
 
     if (screenshotPreviewUrl) {
       URL.revokeObjectURL(screenshotPreviewUrl);
@@ -224,14 +251,163 @@ export function TradeForm({ accounts }: TradeFormProps) {
     }
   }
 
-  function onSubmit(values: TradeFormValues) {
+  async function extractDataFromScreenshot() {
+    if (!screenshotFile) return;
+
+    setIsExtracting(true);
+    setExtractionSummary(null);
+
+    try {
+      // PHASE 3: Replace Tesseract.js with a vision model API call (e.g. Claude vision) for higher accuracy extraction.
+      const result = await Tesseract.recognize(screenshotFile, "eng", {
+        logger: (m) => console.log(m),
+      });
+
+      const text = result.data.text;
+      console.log("OCR Result:", text);
+
+      const extracted = new Set<string>();
+
+      // Extract instrument (known pairs)
+      const instrumentPattern = /\b(EURUSD|GBPUSD|USDJPY|XAUUSD|US30|NAS100|BTCUSD|ETHUSD|EURJPY|GBPJPY|AUDUSD|USDCAD|NZDUSD|EURGBP|EURCHF|GBPCHF|USDCHF|AUDJPY|CADJPY|CHFJPY|NZDJPY|AUDNZD|EURAUD|EURNZD|GBPAUD|GBPNZD)\b/i;
+      const instrumentMatch = text.match(instrumentPattern);
+      if (instrumentMatch) {
+        form.setValue("instrument", instrumentMatch[0].toUpperCase());
+        extracted.add("instrument");
+      }
+
+      // Extract trade type
+      const buyMatch = text.match(/\bBUY\b/i);
+      const sellMatch = text.match(/\bSELL\b/i);
+      if (buyMatch && !sellMatch) {
+        form.setValue("tradeType", "BUY");
+        extracted.add("tradeType");
+      } else if (sellMatch && !buyMatch) {
+        form.setValue("tradeType", "SELL");
+        extracted.add("tradeType");
+      }
+
+      // Extract entry price
+      const entryPattern = /(?:Entry|Open|Price)\s*[:\s]*([\d.]+)/i;
+      const entryMatch = text.match(entryPattern);
+      if (entryMatch) {
+        form.setValue("entryPrice", parseFloat(entryMatch[1]));
+        extracted.add("entryPrice");
+      }
+
+      // Extract exit price
+      const exitPattern = /(?:Close|Exit|TP Hit|SL Hit)\s*[:\s]*([\d.]+)/i;
+      const exitMatch = text.match(exitPattern);
+      if (exitMatch) {
+        form.setValue("exitPrice", parseFloat(exitMatch[1]));
+        extracted.add("exitPrice");
+      }
+
+      // Extract stop loss
+      const slPattern = /(?:SL|Stop Loss)\s*[:\s]*([\d.]+)/i;
+      const slMatch = text.match(slPattern);
+      if (slMatch) {
+        form.setValue("stopLoss", parseFloat(slMatch[1]));
+        extracted.add("stopLoss");
+      }
+
+      // Extract take profit
+      const tpPattern = /(?:TP|Take Profit)\s*[:\s]*([\d.]+)/i;
+      const tpMatch = text.match(tpPattern);
+      if (tpMatch) {
+        form.setValue("takeProfit", parseFloat(tpMatch[1]));
+        extracted.add("takeProfit");
+      }
+
+      // Extract lot size
+      const lotPattern = /(?:Lots|Volume|Size)\s*[:\s]*([\d.]+)/i;
+      const lotMatch = text.match(lotPattern);
+      if (lotMatch) {
+        form.setValue("lotSize", parseFloat(lotMatch[1]));
+        extracted.add("lotSize");
+      }
+
+      setExtractedFields(extracted);
+      setExtractionSummary(`Extracted ${extracted.size} of 7 fields — please review and complete the rest.`);
+    } catch (error) {
+      console.error("OCR extraction error:", error);
+      setError("Failed to extract data from screenshot.");
+    } finally {
+      setIsExtracting(false);
+    }
+  }
+
+  async function onSubmit(values: TradeFormValues) {
     setError(null);
-    startTransition(async () => {
-      const result = await createTrade(values);
+    setIsUploading(true);
+    
+    try {
+      let screenshotUrl = values.screenshotUrl;
+
+      // Upload screenshot if present
+      if (screenshotFile) {
+        const supabase = createClient();
+        const user = await supabase.auth.getUser();
+
+        if (!user.error && user.data.user) {
+          // Try Google Drive first
+          const driveUrl = await uploadScreenshotToDrive(
+            screenshotFile,
+            user.data.user.id,
+            values.instrument,
+            values.tradeType,
+            values.tradeDate
+          );
+
+          if (driveUrl) {
+            screenshotUrl = driveUrl;
+          } else {
+            // Fallback to Supabase Storage
+            console.warn("Google Drive upload failed, falling back to Supabase Storage");
+            screenshotUrl = await uploadScreenshotToSupabase(screenshotFile);
+          }
+        }
+      }
+
+      // Create trade with screenshot URL
+      const result = await createTrade({ ...values, screenshotUrl });
 
       if (result?.error) {
         setError(result.error);
         return;
+      }
+
+      // Send email notification in background (don't await to avoid blocking)
+      const supabase = createClient();
+      const user = await supabase.auth.getUser();
+      if (!user.error && user.data.user?.email) {
+        fetch("/api/send-trade-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userEmail: user.data.user.email,
+            trade: {
+              instrument: values.instrument,
+              trade_type: values.tradeType,
+              entry_price: values.entryPrice,
+              exit_price: values.exitPrice,
+              lot_size: values.lotSize,
+              profit_loss: calculateGenericProfitLoss({
+                tradeType: values.tradeType,
+                entryPrice: values.entryPrice,
+                exitPrice: values.exitPrice,
+                lotSize: values.lotSize,
+                instrument: values.instrument,
+              }),
+              trade_date: values.tradeDate,
+              screenshot_url: screenshotUrl,
+              notes: values.notes,
+            },
+          }),
+        }).catch((err) => {
+          // Silent failure - don't show error to user
+          console.error("Email send failed:", err);
+        });
       }
 
       form.reset({
@@ -247,10 +423,13 @@ export function TradeForm({ accounts }: TradeFormProps) {
         screenshotUrl: null,
         notes: null,
       });
+      setScreenshotFile(null);
       setScreenshotName(null);
       setScreenshotPreviewUrl(null);
       setCustomInstrument("");
-    });
+    } finally {
+      setIsUploading(false);
+    }
   }
 
   return (
@@ -336,6 +515,36 @@ export function TradeForm({ accounts }: TradeFormProps) {
             </div>
           )}
         </label>
+
+        {screenshotPreviewUrl && (
+          <div className="mt-4 flex justify-center">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={extractDataFromScreenshot}
+              disabled={isExtracting}
+              className="gap-2 text-sm"
+            >
+              {isExtracting ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Extracting...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="size-4" />
+                  Extract data from screenshot
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+
+        {extractionSummary && (
+          <div className="mt-3 rounded-md border border-gold/40 bg-gold/10 p-3 text-xs sm:text-sm text-gold-bright">
+            {extractionSummary}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-5 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
@@ -350,18 +559,23 @@ export function TradeForm({ accounts }: TradeFormProps) {
         <div className="space-y-2">
           <Label htmlFor="instrument" className="text-sm">Instrument</Label>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Select value={instrument ?? ""} onValueChange={(value) => form.setValue("instrument", value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select instrument" />
-              </SelectTrigger>
-              <SelectContent>
-                {knownInstruments.map((instrument) => (
-                  <SelectItem key={instrument} value={instrument}>
-                    {instrument}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="relative flex-1">
+              <Select value={instrument ?? ""} onValueChange={(value) => form.setValue("instrument", value)}>
+                <SelectTrigger className={extractedFields.has("instrument") ? "border-amber-500 ring-1 ring-amber-500" : ""}>
+                  <SelectValue placeholder="Select instrument" />
+                </SelectTrigger>
+                <SelectContent>
+                  {knownInstruments.map((instrument) => (
+                    <SelectItem key={instrument} value={instrument}>
+                      {instrument}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {extractedFields.has("instrument") && (
+                <Badge className="absolute -top-2 -right-2 z-10 bg-amber-500 text-xs">Auto-filled</Badge>
+              )}
+            </div>
             <Button
               type="button"
               variant="outline"
@@ -390,29 +604,39 @@ export function TradeForm({ accounts }: TradeFormProps) {
 
         <div className="space-y-2">
           <Label htmlFor="tradeType" className="text-sm">Trade type</Label>
-          <Select
-            value={tradeType}
-            onValueChange={(value) => form.setValue("tradeType", value as "BUY" | "SELL")}
-          >
-            <SelectTrigger className="text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="BUY">BUY</SelectItem>
-              <SelectItem value="SELL">SELL</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="relative">
+            <Select
+              value={tradeType}
+              onValueChange={(value) => form.setValue("tradeType", value as "BUY" | "SELL")}
+            >
+              <SelectTrigger className={extractedFields.has("tradeType") ? "border-amber-500 ring-1 ring-amber-500" : ""}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="BUY">BUY</SelectItem>
+                <SelectItem value="SELL">SELL</SelectItem>
+              </SelectContent>
+            </Select>
+            {extractedFields.has("tradeType") && (
+              <Badge className="absolute -top-2 -right-2 z-10 bg-amber-500 text-xs">Auto-filled</Badge>
+            )}
+          </div>
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="entryPrice" className="text-sm">Entry price</Label>
-          <Input
-            id="entryPrice"
-            type="number"
-            step="0.000001"
-            {...form.register("entryPrice", { valueAsNumber: true })}
-            className="text-sm"
-          />
+          <div className="relative">
+            <Input
+              id="entryPrice"
+              type="number"
+              step="0.000001"
+              {...form.register("entryPrice", { valueAsNumber: true })}
+              className={extractedFields.has("entryPrice") ? "border-amber-500 ring-1 ring-amber-500" : "text-sm"}
+            />
+            {extractedFields.has("entryPrice") && (
+              <Badge className="absolute -top-2 -right-2 z-10 bg-amber-500 text-xs">Auto-filled</Badge>
+            )}
+          </div>
           {form.formState.errors.entryPrice && (
             <p className="text-sm text-loss">{form.formState.errors.entryPrice.message}</p>
           )}
@@ -420,13 +644,18 @@ export function TradeForm({ accounts }: TradeFormProps) {
 
         <div className="space-y-2">
           <Label htmlFor="exitPrice" className="text-sm">Exit price</Label>
-          <Input
-            id="exitPrice"
-            type="number"
-            step="0.000001"
-            {...form.register("exitPrice", { valueAsNumber: true })}
-            className="text-sm"
-          />
+          <div className="relative">
+            <Input
+              id="exitPrice"
+              type="number"
+              step="0.000001"
+              {...form.register("exitPrice", { valueAsNumber: true })}
+              className={extractedFields.has("exitPrice") ? "border-amber-500 ring-1 ring-amber-500" : "text-sm"}
+            />
+            {extractedFields.has("exitPrice") && (
+              <Badge className="absolute -top-2 -right-2 z-10 bg-amber-500 text-xs">Auto-filled</Badge>
+            )}
+          </div>
           {form.formState.errors.exitPrice && (
             <p className="text-sm text-loss">{form.formState.errors.exitPrice.message}</p>
           )}
@@ -447,13 +676,18 @@ export function TradeForm({ accounts }: TradeFormProps) {
 
         <div className="space-y-2">
           <Label htmlFor="lotSize" className="text-sm">Lot size</Label>
-          <Input
-            id="lotSize"
-            type="number"
-            step="0.000001"
-            {...form.register("lotSize", { valueAsNumber: true })}
-            className="text-sm"
-          />
+          <div className="relative">
+            <Input
+              id="lotSize"
+              type="number"
+              step="0.000001"
+              {...form.register("lotSize", { valueAsNumber: true })}
+              className={extractedFields.has("lotSize") ? "border-amber-500 ring-1 ring-amber-500" : "text-sm"}
+            />
+            {extractedFields.has("lotSize") && (
+              <Badge className="absolute -top-2 -right-2 z-10 bg-amber-500 text-xs">Auto-filled</Badge>
+            )}
+          </div>
           {form.formState.errors.lotSize && (
             <p className="text-sm text-loss">{form.formState.errors.lotSize.message}</p>
           )}
@@ -461,13 +695,18 @@ export function TradeForm({ accounts }: TradeFormProps) {
 
         <div className="space-y-2">
           <Label htmlFor="stopLoss" className="text-sm">Stop loss</Label>
-          <Input
-            id="stopLoss"
-            type="number"
-            step="0.000001"
-            {...form.register("stopLoss", { valueAsNumber: true })}
-            className="text-sm"
-          />
+          <div className="relative">
+            <Input
+              id="stopLoss"
+              type="number"
+              step="0.000001"
+              {...form.register("stopLoss", { valueAsNumber: true })}
+              className={extractedFields.has("stopLoss") ? "border-amber-500 ring-1 ring-amber-500" : "text-sm"}
+            />
+            {extractedFields.has("stopLoss") && (
+              <Badge className="absolute -top-2 -right-2 z-10 bg-amber-500 text-xs">Auto-filled</Badge>
+            )}
+          </div>
           {form.formState.errors.stopLoss && (
             <p className="text-sm text-loss">{form.formState.errors.stopLoss.message}</p>
           )}
@@ -475,13 +714,18 @@ export function TradeForm({ accounts }: TradeFormProps) {
 
         <div className="space-y-2">
           <Label htmlFor="takeProfit" className="text-sm">Take profit</Label>
-          <Input
-            id="takeProfit"
-            type="number"
-            step="0.000001"
-            {...form.register("takeProfit", { valueAsNumber: true })}
-            className="text-sm"
-          />
+          <div className="relative">
+            <Input
+              id="takeProfit"
+              type="number"
+              step="0.000001"
+              {...form.register("takeProfit", { valueAsNumber: true })}
+              className={extractedFields.has("takeProfit") ? "border-amber-500 ring-1 ring-amber-500" : "text-sm"}
+            />
+            {extractedFields.has("takeProfit") && (
+              <Badge className="absolute -top-2 -right-2 z-10 bg-amber-500 text-xs">Auto-filled</Badge>
+            )}
+          </div>
           {form.formState.errors.takeProfit && (
             <p className="text-sm text-loss">{form.formState.errors.takeProfit.message}</p>
           )}
