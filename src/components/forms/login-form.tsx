@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginAction } from "@/lib/actions/auth";
@@ -8,10 +9,13 @@ import { authSchema, type AuthFormValues } from "@/lib/validations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AuthLoader } from "@/components/ui/auth-loader";
 
 export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [showLoader, setShowLoader] = useState(false);
+  const router = useRouter();
   const form = useForm<AuthFormValues>({
     resolver: zodResolver(authSchema),
     defaultValues: {
@@ -26,12 +30,20 @@ export function LoginForm() {
       const result = await loginAction(values);
       if (result?.error) {
         setError(result.error);
+      } else {
+        setShowLoader(true);
+        // Navigate to dashboard after short delay for loader to show
+        setTimeout(() => {
+          router.push("/dashboard/overview");
+        }, 100);
       }
     });
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+    <>
+      <AuthLoader show={showLoader} />
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
@@ -69,5 +81,6 @@ export function LoginForm() {
         </Button>
       </div>
     </form>
+    </>
   );
 }

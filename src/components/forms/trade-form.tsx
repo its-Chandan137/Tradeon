@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useWatch, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Upload, X, Loader2, Sparkles } from "lucide-react";
+import { Upload, X, Loader2, Sparkles, Check } from "lucide-react";
 import Tesseract from "tesseract.js";
 import { createTrade } from "@/lib/actions/trades";
 import { createClient } from "@/lib/supabase/client";
-import { calculateGenericProfitLoss, calculateRiskReward, formatCurrency, getInstrumentMultiplier } from "@/lib/utils";
+import { calculateGenericProfitLoss, calculateRiskReward, formatCurrency, getInstrumentMultiplier, cn } from "@/lib/utils";
 import { tradeSchema, type TradeFormValues } from "@/lib/validations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +62,7 @@ export function TradeForm({ accounts }: TradeFormProps) {
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedFields, setExtractedFields] = useState<Set<string>>(new Set());
   const [extractionSummary, setExtractionSummary] = useState<string | null>(null);
+  const [submitState, setSubmitState] = useState<"idle" | "uploading" | "saving" | "success">("idle");
 
   const form = useForm<TradeFormValues>({
     resolver: zodResolver(tradeSchema),
@@ -339,13 +340,13 @@ export function TradeForm({ accounts }: TradeFormProps) {
 
   async function onSubmit(values: TradeFormValues) {
     setError(null);
-    setIsUploading(true);
     
     try {
       let screenshotUrl = values.screenshotUrl;
 
       // Upload screenshot if present
       if (screenshotFile) {
+        setSubmitState("uploading");
         const supabase = createClient();
         const user = await supabase.auth.getUser();
 
@@ -370,13 +371,18 @@ export function TradeForm({ accounts }: TradeFormProps) {
       }
 
       // Create trade with screenshot URL
+      setSubmitState("saving");
       const result = await createTrade({ ...values, screenshotUrl });
 
       if (result?.error) {
         setError(result.error);
+        setSubmitState("idle");
         return;
       }
 
+      // Success state
+      setSubmitState("success");
+      
       // Send email notification in background (don't await to avoid blocking)
       const supabase = createClient();
       const user = await supabase.auth.getUser();
@@ -410,25 +416,32 @@ export function TradeForm({ accounts }: TradeFormProps) {
         });
       }
 
-      form.reset({
-        tradeDate: new Date().toISOString().slice(0, 10),
-        accountId: "",
-        instrument: "",
-        tradeType: "BUY",
-        entryPrice: undefined,
-        exitPrice: undefined,
-        lotSize: undefined,
-        stopLoss: undefined,
-        takeProfit: undefined,
-        screenshotUrl: null,
-        notes: null,
-      });
-      setScreenshotFile(null);
-      setScreenshotName(null);
-      setScreenshotPreviewUrl(null);
-      setCustomInstrument("");
-    } finally {
-      setIsUploading(false);
+      // Reset form after success delay
+      setTimeout(() => {
+        form.reset({
+          tradeDate: new Date().toISOString().slice(0, 10),
+          accountId: "",
+          instrument: "",
+          tradeType: "BUY",
+          entryPrice: undefined,
+          exitPrice: undefined,
+          lotSize: undefined,
+          stopLoss: undefined,
+          takeProfit: undefined,
+          screenshotUrl: null,
+          notes: null,
+        });
+        setScreenshotFile(null);
+        setScreenshotName(null);
+        setScreenshotPreviewUrl(null);
+        setCustomInstrument("");
+        setExtractedFields(new Set());
+        setExtractionSummary(null);
+        setSubmitState("idle");
+      }, 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save trade");
+      setSubmitState("idle");
     }
   }
 
@@ -759,8 +772,33 @@ export function TradeForm({ accounts }: TradeFormProps) {
 
       {error && <p className="rounded-md border border-loss-muted/40 bg-loss-muted/10 p-3 text-xs sm:text-sm text-loss">{error}</p>}
 
-      <Button type="submit" disabled={isPending || isUploading || accounts.length === 0} className="w-full sm:w-auto text-sm">
-        {isPending ? "Saving trade..." : isUploading ? "Uploading screenshot..." : "Log trade"}
+      <Button 
+        type="submit" 
+        disabled={submitState !== "idle" || accounts.length === 0} 
+        className={cn(
+          "w-full sm:w-auto text-sm",
+          submitState === "success" && "bg-green-600 hover:bg-green-700"
+        )}
+      >
+        {submitState === "uploading" && (
+          <>
+            <Loader2 className="mr-2 size-4 animate-spin" />
+            Uploading screenshot...
+          </>
+        )}
+        {submitState === "saving" && (
+          <>
+            <Loader2 className="mr-2 size-4 animate-spin" />
+            Saving trade...
+          </>
+        )}
+        {submitState === "success" && (
+          <>
+            <Check className="mr-2 size-4" />
+            Trade saved ✓
+          </>
+        )}
+        {submitState === "idle" && "Log trade"}
       </Button>
     </form>
   );

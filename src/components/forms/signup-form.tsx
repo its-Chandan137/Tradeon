@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signupAction } from "@/lib/actions/auth";
@@ -8,11 +9,14 @@ import { authSchema, type AuthFormValues } from "@/lib/validations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AuthLoader } from "@/components/ui/auth-loader";
 
 export function SignupForm() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [showLoader, setShowLoader] = useState(false);
+  const router = useRouter();
   const form = useForm<AuthFormValues>({
     resolver: zodResolver(authSchema),
     defaultValues: {
@@ -34,11 +38,17 @@ export function SignupForm() {
 
       setMessage(result?.message ?? "Account created. You can sign in now.");
       form.reset();
+      setShowLoader(true);
+      setTimeout(() => {
+        router.push("/login");
+      }, 1500);
     });
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+    <>
+      <AuthLoader show={showLoader} />
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="displayName">Display name</Label>
@@ -94,5 +104,6 @@ export function SignupForm() {
         </Button>
       </div>
     </form>
+    </>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import nprogress from "nprogress";
 import {
   BarChart3,
   BookOpenText,
@@ -23,6 +24,13 @@ const navigation = [
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault();
+    nprogress.start();
+    router.push(href);
+  };
 
   return (
     <div className="fixed left-0 top-0 z-30 hidden h-screen w-72 shrink-0 overflow-hidden border-r border-border bg-surface md:flex md:flex-col">
@@ -47,6 +55,7 @@ export function DashboardSidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={(e) => handleNavClick(e, item.href)}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                 isActive

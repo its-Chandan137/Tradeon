@@ -201,3 +201,49 @@ body {
 .animate-slide-in-right {
   animation: slide-in-right 0.3s ease-out;
 }
+
+/* Tab content transition */
+@keyframes tab-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-tab-fade-in {
+  animation: tab-fade-in 0.2s ease-out both;
+}
+
+/* Skeleton shimmer */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    #13161C 0%,
+    #181C24 50%,
+    #13161C 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: no-preference) {
+  .animate-fade-in-up,
+  .animate-fade-in,
+  .animate-tab-fade-in,
+  .animate-slide-in-right,
+  .animate-pulse-glow,
+  .skeleton-shimmer {
+    animation-play-state: running;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up,
+  .animate-fade-in,
+  .animate-tab-fade-in,
+  .animate-slide-in-right,
+  .animate-pulse-glow,
+  .skeleton-shimmer {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
