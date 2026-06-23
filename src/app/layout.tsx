@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
 import { NavigationProgress } from "@/components/ui/navigation-progress";
 import { NavigationProgressProvider } from "@/components/ui/navigation-progress-provider";
@@ -46,7 +47,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <NavigationProgress />
-        <NavigationProgressProvider />
+        <Suspense fallback={null}>
+          <NavigationProgressProvider />
+        </Suspense>
         {children}
       </body>
     </html>
