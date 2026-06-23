@@ -1,7 +1,8 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PsychologyForm } from "@/components/forms/psychology-form";
 import { PsychologyHistoryTable } from "@/components/tables/psychology-history-table";
 
@@ -21,32 +22,31 @@ export default async function PsychologyPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full overflow-x-hidden space-y-6">
       <PageHeader
         eyebrow="Psychology"
         title="Trading psychology journal"
         description="Track confidence, emotional state, setup discipline, mistakes, and lessons."
       />
 
-      <div className="grid gap-6 xl:grid-cols-[440px_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>New entry</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PsychologyForm />
-          </CardContent>
-        </Card>
+      <Card className="card-sheen">
+        <CardContent className="p-4 sm:p-5">
+          <Tabs defaultValue="add" className="w-full">
+            <TabsList className="mb-4 sm:mb-5 grid grid-cols-2">
+              <TabsTrigger value="add" className="text-sm">Add Entry</TabsTrigger>
+              <TabsTrigger value="history" className="text-sm">Entry History</TabsTrigger>
+            </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Entry history</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PsychologyHistoryTable entries={entries ?? []} />
-          </CardContent>
-        </Card>
-      </div>
+            <TabsContent value="add" className="mt-0">
+              <PsychologyForm />
+            </TabsContent>
+
+            <TabsContent value="history" className="mt-0">
+              <PsychologyHistoryTable entries={entries ?? []} />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 }

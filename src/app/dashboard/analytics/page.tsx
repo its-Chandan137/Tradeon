@@ -26,7 +26,7 @@ export default async function AnalyticsPage() {
   const buySellRows = computeBuySellBreakdown(trades ?? []);
 
   return (
-    <div className="space-y-6">
+    <div className="w-full overflow-x-hidden space-y-6">
       <PageHeader
         eyebrow="Analytics"
         title="Performance analytics"
@@ -35,12 +35,12 @@ export default async function AnalyticsPage() {
 
       <MetricsGrid metrics={metrics} />
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
+      <div className="grid gap-4 sm:gap-6 xl:grid-cols-[1fr_420px]">
         <EquityCurveChart trades={trades ?? []} />
 
-        <Card>
+        <Card className="card-sheen">
           <CardHeader>
-            <CardTitle>Buy vs sell</CardTitle>
+            <CardTitle className="text-base sm:text-lg">Buy vs sell</CardTitle>
           </CardHeader>
           <CardContent>
             <BuySellBreakdown rows={buySellRows} />
@@ -48,9 +48,9 @@ export default async function AnalyticsPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="card-sheen">
         <CardHeader>
-          <CardTitle>Instrument breakdown</CardTitle>
+          <CardTitle className="text-base sm:text-lg">Instrument breakdown</CardTitle>
         </CardHeader>
         <CardContent>
           <InstrumentBreakdown rows={instrumentRows} />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useForm } from "react-hook-form";
+import { useWatch, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createAccount, updateAccount } from "@/lib/actions/accounts";
 import { accountSchema, type AccountFormValues } from "@/lib/validations";
@@ -52,6 +52,8 @@ export function AccountForm({ account, onSaved }: AccountFormProps) {
     });
   }, [account, form]);
 
+  const phase = useWatch({ control: form.control, name: "phase" }) as AccountFormValues["phase"];
+
   function onSubmit(values: AccountFormValues) {
     setError(null);
     startTransition(async () => {
@@ -76,8 +78,8 @@ export function AccountForm({ account, onSaved }: AccountFormProps) {
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2">
+    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="accountName">Account name</Label>
           <Input id="accountName" placeholder="Prop Firm A" {...form.register("accountName")} />
@@ -89,7 +91,7 @@ export function AccountForm({ account, onSaved }: AccountFormProps) {
         <div className="space-y-2">
           <Label htmlFor="phase">Phase</Label>
           <Select
-            value={form.watch("phase")}
+            value={phase}
             onValueChange={(value) => form.setValue("phase", value as AccountFormValues["phase"])}
           >
             <SelectTrigger>

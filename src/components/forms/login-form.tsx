@@ -31,7 +31,7 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="rounded-lg border border-border bg-surface p-6 shadow-terminal">
+    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>

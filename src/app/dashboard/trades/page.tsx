@@ -1,7 +1,8 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TradeForm } from "@/components/forms/trade-form";
 import { TradeHistoryTable } from "@/components/tables/trade-history-table";
 
@@ -31,32 +32,31 @@ export default async function TradesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full overflow-x-hidden space-y-6">
       <PageHeader
         eyebrow="Add Trade"
         title="Log a trade"
-        description="Capture execution details, upload a screenshot, and calculate generic P/L without instrument-specific multipliers."
+        description="Capture execution details, upload a screenshot, and calculate P/L with instrument-aware multipliers."
       />
 
-      <div className="grid gap-6 xl:grid-cols-[440px_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Trade details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TradeForm accounts={accounts ?? []} />
-          </CardContent>
-        </Card>
+      <Card className="card-sheen">
+        <CardContent className="p-4 sm:p-5">
+          <Tabs defaultValue="log" className="w-full">
+            <TabsList className="mb-4 sm:mb-5 grid grid-cols-2">
+              <TabsTrigger value="log" className="text-sm">Log Trade</TabsTrigger>
+              <TabsTrigger value="history" className="text-sm">Trade History</TabsTrigger>
+            </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Trade history</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <TradeHistoryTable trades={trades ?? []} />
-          </CardContent>
-        </Card>
-      </div>
+            <TabsContent value="log" className="mt-0">
+              <TradeForm accounts={accounts ?? []} />
+            </TabsContent>
+
+            <TabsContent value="history" className="mt-0">
+              <TradeHistoryTable trades={trades ?? []} />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 }

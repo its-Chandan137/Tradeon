@@ -15,7 +15,7 @@ interface MetricsGridProps {
 
 export function MetricsGrid({ metrics }: MetricsGridProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
       <MetricCard title="Total trades" value={metrics.totalTrades} />
       <MetricCard title="Win rate" value={`${metrics.winRate.toFixed(1)}%`} />
       <MetricCard title="Loss rate" value={`${metrics.lossRate.toFixed(1)}%`} />
@@ -53,12 +53,12 @@ export function MetricsGrid({ metrics }: MetricsGridProps) {
 
 function MetricCard({ title, value }: { title: string; value: React.ReactNode }) {
   return (
-    <Card>
+    <Card className="card-sheen">
       <CardHeader>
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="tabular-finance text-2xl font-semibold text-foreground">{value}</div>
+        <div className="tabular-finance break-words text-xl font-semibold text-foreground sm:text-2xl lg:text-3xl">{value}</div>
       </CardContent>
     </Card>
   );

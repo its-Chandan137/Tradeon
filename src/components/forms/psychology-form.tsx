@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createPsychologyEntry } from "@/lib/actions/psychology";
 import { psychologySchema, type PsychologyFormValues } from "@/lib/validations";
@@ -48,6 +48,11 @@ export function PsychologyForm() {
     },
   });
 
+  const confidenceLevel = useWatch({ control: form.control, name: "confidenceLevel" });
+  const emotionBefore = useWatch({ control: form.control, name: "emotionBefore" });
+  const emotionAfter = useWatch({ control: form.control, name: "emotionAfter" });
+  const followedSetup = useWatch({ control: form.control, name: "followedSetup" });
+
   function onSubmit(values: PsychologyFormValues) {
     setError(null);
     startTransition(async () => {
@@ -82,12 +87,12 @@ export function PsychologyForm() {
         </div>
 
         <div className="space-y-4">
-          <Label>Confidence level: {form.watch("confidenceLevel")}/10</Label>
+          <Label>Confidence level: {confidenceLevel}/10</Label>
           <Slider
             min={1}
             max={10}
             step={1}
-            value={[form.watch("confidenceLevel")]}
+            value={[confidenceLevel]}
             onValueChange={([value]) => form.setValue("confidenceLevel", value)}
           />
           {form.formState.errors.confidenceLevel && (
@@ -98,7 +103,7 @@ export function PsychologyForm() {
         <div className="space-y-2">
           <Label htmlFor="emotionBefore">Emotion before</Label>
           <Select
-            value={form.watch("emotionBefore")}
+            value={emotionBefore}
             onValueChange={(value) => form.setValue("emotionBefore", value)}
           >
             <SelectTrigger>
@@ -120,7 +125,7 @@ export function PsychologyForm() {
         <div className="space-y-2">
           <Label htmlFor="emotionAfter">Emotion after</Label>
           <Select
-            value={form.watch("emotionAfter")}
+            value={emotionAfter}
             onValueChange={(value) => form.setValue("emotionAfter", value)}
           >
             <SelectTrigger>
@@ -145,7 +150,7 @@ export function PsychologyForm() {
             <p className="text-sm text-muted-foreground">Mark yes only if you executed the planned setup.</p>
           </div>
           <Switch
-            checked={form.watch("followedSetup")}
+            checked={followedSetup}
             onCheckedChange={(checked) => form.setValue("followedSetup", checked)}
           />
         </div>

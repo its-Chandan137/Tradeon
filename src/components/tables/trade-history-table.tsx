@@ -33,6 +33,31 @@ interface TradeHistoryTableProps {
 
 type SortKey = keyof TradeHistoryTableProps["trades"][number];
 
+function SortHeader({
+  label,
+  column,
+  sortKey,
+  sortDirection,
+  onSort,
+}: {
+  label: string;
+  column: SortKey;
+  sortKey: SortKey;
+  sortDirection: "asc" | "desc";
+  onSort: (key: SortKey) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1"
+      onClick={() => onSort(column)}
+    >
+      {label}
+      <ArrowUpDown className={cnSortIcon(sortKey, column, sortDirection)} />
+    </button>
+  );
+}
+
 export function TradeHistoryTable({ trades }: TradeHistoryTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -62,71 +87,79 @@ export function TradeHistoryTable({ trades }: TradeHistoryTableProps) {
     setSortDirection("desc");
   }
 
-  function SortHeader({ label, column }: { label: string; column: SortKey }) {
-    return (
-      <button
-        type="button"
-        className="inline-flex items-center gap-1"
-        onClick={() => toggleSort(column)}
-      >
-        {label}
-        <ArrowUpDown className="size-3 text-muted-foreground" />
-      </button>
-    );
-  }
-
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Date</TableHead>
-          <TableHead><SortHeader label="Instrument" column="instrument" /></TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead className="text-right"><SortHeader label="Entry" column="entry_price" /></TableHead>
-          <TableHead className="text-right"><SortHeader label="Exit" column="exit_price" /></TableHead>
-          <TableHead className="text-right"><SortHeader label="Lots" column="lot_size" /></TableHead>
-          <TableHead className="text-right"><SortHeader label="P/L" column="profit_loss" /></TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {sortedTrades.length === 0 ? (
+    <div className="relative overflow-x-auto rounded-lg border border-border">
+      <div className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-12 bg-gradient-to-l from-[#0B0E11] to-transparent md:w-8" />
+      <Table className="min-w-[600px] sm:min-w-[680px]">
+        <TableHeader>
           <TableRow>
-            <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-              No trades logged yet.
-            </TableCell>
+            <TableHead className="whitespace-nowrap text-xs">Date</TableHead>
+            <TableHead className="whitespace-nowrap text-xs">
+              <SortHeader label="Instrument" column="instrument" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+            </TableHead>
+            <TableHead className="whitespace-nowrap text-xs">Type</TableHead>
+            <TableHead className="whitespace-nowrap text-right text-xs">
+              <SortHeader label="Entry" column="entry_price" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+            </TableHead>
+            <TableHead className="whitespace-nowrap text-right text-xs">
+              <SortHeader label="Exit" column="exit_price" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+            </TableHead>
+            <TableHead className="whitespace-nowrap text-right text-xs">
+              <SortHeader label="Lots" column="lot_size" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+            </TableHead>
+            <TableHead className="whitespace-nowrap text-right text-xs">
+              <SortHeader label="P/L" column="profit_loss" sortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} />
+            </TableHead>
           </TableRow>
-        ) : (
-          sortedTrades.map((trade) => (
-            <TableRow key={trade.id}>
-              <TableCell className="tabular-finance font-mono text-sm">
-                {new Date(trade.trade_date).toLocaleDateString()}
-              </TableCell>
-              <TableCell className="font-medium text-foreground">{trade.instrument}</TableCell>
-              <TableCell>
-                <Badge variant={trade.trade_type === "BUY" ? "default" : "secondary"}>
-                  {trade.trade_type}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-right">
-                <FinancialValue value={trade.entry_price} digits={5} />
-              </TableCell>
-              <TableCell className="text-right">
-                <FinancialValue value={trade.exit_price} digits={5} />
-              </TableCell>
-              <TableCell className="text-right">
-                <FinancialValue value={trade.lot_size} digits={3} />
-              </TableCell>
-              <TableCell className={cnTradePnl(trade.profit_loss)}>
-                <FinancialValue value={trade.profit_loss} sign="auto" />
+        </TableHeader>
+        <TableBody>
+          {sortedTrades.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                No trades logged yet.
               </TableCell>
             </TableRow>
-          ))
-        )}
-      </TableBody>
-    </Table>
+          ) : (
+            sortedTrades.map((trade) => (
+              <TableRow key={trade.id}>
+                <TableCell className="whitespace-nowrap tabular-finance font-mono text-xs sm:text-sm">
+                  {new Date(trade.trade_date).toLocaleDateString()}
+                </TableCell>
+                <TableCell className="whitespace-nowrap font-medium text-foreground text-xs sm:text-sm">{trade.instrument}</TableCell>
+                <TableCell className="whitespace-nowrap">
+                  <Badge variant={trade.trade_type === "BUY" ? "default" : "secondary"} className="text-xs">
+                    {trade.trade_type}
+                  </Badge>
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-right text-xs sm:text-sm">
+                  <FinancialValue value={trade.entry_price} digits={5} />
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-right text-xs sm:text-sm">
+                  <FinancialValue value={trade.exit_price} digits={5} />
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-right text-xs sm:text-sm">
+                  <FinancialValue value={trade.lot_size} digits={3} />
+                </TableCell>
+                <TableCell className={cnTradePnl(trade.profit_loss)}>
+                  <FinancialValue value={trade.profit_loss} sign="auto" />
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
 function cnTradePnl(value: number) {
   return value >= 0 ? "text-profit" : "text-loss";
+}
+
+function cnSortIcon(sortKey: SortKey, column: SortKey, sortDirection: "asc" | "desc") {
+  if (sortKey !== column) {
+    return "size-3 text-muted-foreground";
+  }
+
+  return ["size-3", sortDirection === "asc" ? "rotate-180" : ""].join(" ");
 }

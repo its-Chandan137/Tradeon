@@ -10,13 +10,14 @@ export default async function DashboardLayout({
   await requireUser();
 
   return (
-    <div className="min-h-screen bg-[#0B0E11]">
-      <div className="flex min-h-screen">
-        <DashboardSidebar />
-        <div className="flex min-h-screen flex-1 flex-col">
-          <MobileNav />
-          <main className="flex-1 p-4 md:p-8">{children}</main>
-        </div>
+    <div className="relative min-h-screen bg-[#0B0E11]">
+      <div className="pointer-events-none fixed inset-0 -z-10 ambient-grid" aria-hidden />
+      <DashboardSidebar />
+      <div className="flex min-h-screen flex-col md:pl-72">
+        <MobileNav />
+        <main className="flex-1 overflow-x-hidden px-4 py-6 sm:px-6 md:px-10 md:py-10">
+          {children}
+        </main>
       </div>
     </div>
   );

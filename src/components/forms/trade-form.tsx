@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { useForm } from "react-hook-form";
+import { useWatch, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Upload, X } from "lucide-react";
 import { createTrade } from "@/lib/actions/trades";
 import { createClient } from "@/lib/supabase/client";
-import { calculateRiskReward } from "@/lib/utils";
+import { calculateGenericProfitLoss, calculateRiskReward, formatCurrency, getInstrumentMultiplier } from "@/lib/utils";
 import { tradeSchema, type TradeFormValues } from "@/lib/validations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,9 +30,29 @@ interface TradeFormProps {
   }>;
 }
 
+function hasNumber(value: number | undefined) {
+  return Number.isFinite(value) && value !== 0;
+}
+
+function isUsingDefaultMultiplier(instrument: string | undefined) {
+  if (!instrument) {
+    return false;
+  }
+
+  const normalizedInstrument = instrument.trim().toUpperCase();
+  const knownDefaultForexInstruments = ["EURUSD", "GBPUSD", "USDJPY", "EURJPY", "GBPJPY",
+    "AUDUSD", "USDCAD", "NZDUSD", "EURGBP", "EURCHF", "GBPCHF", "USDCHF",
+    "AUDJPY", "CADJPY", "CHFJPY", "NZDJPY", "AUDNZD", "EURAUD", "EURNZD", "GBPAUD", "GBPNZD"];
+
+  const { multiplier } = getInstrumentMultiplier(normalizedInstrument);
+  return multiplier === 100000 && !knownDefaultForexInstruments.includes(normalizedInstrument);
+}
+
 export function TradeForm({ accounts }: TradeFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [screenshotName, setScreenshotName] = useState<string | null>(null);
+  const [screenshotPreviewUrl, setScreenshotPreviewUrl] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [knownInstruments, setKnownInstruments] = useState(commonInstruments);
@@ -54,29 +75,82 @@ export function TradeForm({ accounts }: TradeFormProps) {
     },
   });
 
-  const watch = form.watch();
-  const riskReward = useMemo(() => {
-    const entryPrice = Number(watch.entryPrice);
-    const stopLoss = Number(watch.stopLoss);
-    const takeProfit = Number(watch.takeProfit);
-
-    if (!entryPrice || !stopLoss || !takeProfit) {
+  const accountId = useWatch({ control: form.control, name: "accountId" });
+  const instrument = useWatch({ control: form.control, name: "instrument" }) ?? customInstrument;
+  const tradeType = useWatch({ control: form.control, name: "tradeType" }) as TradeFormValues["tradeType"];
+  const entryPrice = useWatch({ control: form.control, name: "entryPrice" });
+  const exitPrice = useWatch({ control: form.control, name: "exitPrice" });
+  const lotSize = useWatch({ control: form.control, name: "lotSize" });
+  const stopLoss = useWatch({ control: form.control, name: "stopLoss" });
+  const takeProfit = useWatch({ control: form.control, name: "takeProfit" });
+  const liveProfitLoss = useMemo(() => {
+    if (!instrument || !hasNumber(entryPrice) || !hasNumber(exitPrice) || !hasNumber(lotSize)) {
       return null;
     }
 
-    return calculateRiskReward({
-      tradeType: watch.tradeType,
+    return calculateGenericProfitLoss({
+      tradeType,
       entryPrice,
-      stopLoss,
-      takeProfit,
+      exitPrice,
+      lotSize,
+      instrument,
     });
-  }, [watch.entryPrice, watch.stopLoss, watch.takeProfit, watch.tradeType]);
+  }, [entryPrice, exitPrice, instrument, lotSize, tradeType]);
+
+  const riskRewardPreview = useMemo(() => {
+    const numericEntryPrice = Number(entryPrice);
+    const numericStopLoss = Number(stopLoss);
+    const numericTakeProfit = Number(takeProfit);
+
+    if (!hasNumber(numericEntryPrice) ||
+      !hasNumber(numericStopLoss) ||
+      !hasNumber(numericTakeProfit) ||
+      !hasNumber(lotSize) ||
+      !instrument
+    ) {
+      return null;
+    }
+
+    const riskReward = calculateRiskReward({
+      tradeType,
+      entryPrice: numericEntryPrice,
+      stopLoss: numericStopLoss,
+      takeProfit: numericTakeProfit,
+    });
+
+    if (riskReward === null) {
+      return null;
+    }
+
+    const multiplierData = getInstrumentMultiplier(instrument);
+    const multiplier = multiplierData.multiplier;
+    const riskDistance = tradeType === "BUY" ? numericEntryPrice - numericStopLoss : numericStopLoss - numericEntryPrice;
+    const rewardDistance = tradeType === "BUY" ? numericTakeProfit - numericEntryPrice : numericEntryPrice - numericTakeProfit;
+
+    if (!Number.isFinite(riskDistance) || !Number.isFinite(rewardDistance)) {
+      return null;
+    }
+
+    return {
+      riskReward,
+      risk: Number((riskDistance * lotSize * multiplier).toFixed(2)),
+      reward: Number((rewardDistance * lotSize * multiplier).toFixed(2)),
+    };
+  }, [entryPrice, instrument, lotSize, stopLoss, takeProfit, tradeType]);
 
   useEffect(() => {
     if (!knownInstruments.includes(customInstrument)) {
       form.setValue("instrument", customInstrument);
     }
   }, [customInstrument, form, knownInstruments]);
+
+  useEffect(() => {
+    return () => {
+      if (screenshotPreviewUrl) {
+        URL.revokeObjectURL(screenshotPreviewUrl);
+      }
+    };
+  }, [screenshotPreviewUrl]);
 
   async function uploadScreenshot(file: File) {
     const supabase = createClient();
@@ -111,6 +185,45 @@ export function TradeForm({ accounts }: TradeFormProps) {
     form.setValue("screenshotUrl", data.signedUrl);
   }
 
+  function handleScreenshotChange(file: File | undefined) {
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file.");
+      return;
+    }
+
+    if (screenshotPreviewUrl) {
+      URL.revokeObjectURL(screenshotPreviewUrl);
+    }
+
+    setScreenshotPreviewUrl(URL.createObjectURL(file));
+    setScreenshotName(file.name);
+    setError(null);
+    setIsUploading(true);
+
+    uploadScreenshot(file)
+      .catch((uploadError) => {
+        setError(uploadError instanceof Error ? uploadError.message : "Screenshot upload failed.");
+        removeScreenshot();
+      })
+      .finally(() => {
+        setIsUploading(false);
+      });
+  }
+
+  function removeScreenshot() {
+    form.setValue("screenshotUrl", null);
+    setScreenshotName(null);
+
+    if (screenshotPreviewUrl) {
+      URL.revokeObjectURL(screenshotPreviewUrl);
+      setScreenshotPreviewUrl(null);
+    }
+  }
+
   function onSubmit(values: TradeFormValues) {
     setError(null);
     startTransition(async () => {
@@ -135,60 +248,109 @@ export function TradeForm({ accounts }: TradeFormProps) {
         notes: null,
       });
       setScreenshotName(null);
+      setScreenshotPreviewUrl(null);
       setCustomInstrument("");
     });
   }
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Screenshot upload moved to the top as a prominent focal point */}
+      <div className="rounded-lg border border-border bg-surface-raised p-4">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Label className="text-sm sm:text-base">Trade screenshot</Label>
+            <p className="text-xs sm:text-sm text-muted-foreground">Attach the execution screenshot before logging the trade.</p>
+          </div>
+          {screenshotName && (
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="w-fit gap-2">
+                <span className="max-w-48 truncate">{screenshotName}</span>
+                <button
+                  type="button"
+                  onClick={removeScreenshot}
+                  className="rounded-full p-1 hover:bg-surface-muted transition-colors"
+                  aria-label="Remove screenshot"
+                >
+                  <X className="size-3" />
+                </button>
+              </Badge>
+            </div>
+          )}
+        </div>
+
+        <label
+          htmlFor="screenshot"
+          onDragOver={(event) => {
+            event.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setIsDragging(false);
+            handleScreenshotChange(event.dataTransfer.files?.[0]);
+          }}
+          onClick={() => {
+            const fileInput = document.getElementById('screenshot') as HTMLInputElement;
+            fileInput?.click();
+          }}
+          className={`cursor-pointer ${cnDropzone(isDragging)} transition-all duration-200 ${screenshotPreviewUrl ? 'ring-2 ring-gold/50' : ''}`}
+        >
+          <input
+            id="screenshot"
+            className="sr-only"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(event) => handleScreenshotChange(event.target.files?.[0])}
+          />
+          {screenshotPreviewUrl ? (
+            <div className="relative w-full group">
+              <img
+                src={screenshotPreviewUrl}
+                alt="Selected trade screenshot preview"
+                className="h-64 w-full rounded-lg object-contain bg-surface-muted p-2 transition-transform duration-200 group-hover:scale-[1.02]"
+              />
+              <div className="pointer-events-none absolute inset-0 rounded-lg border border-gold/40" />
+            </div>
+          ) : (
+            <div className="flex min-h-64 flex-col items-center justify-center gap-4 text-center">
+              <div className="grid size-16 place-items-center rounded-full border-2 border-dashed border-gold/40 bg-gold/10 text-gold-bright transition-colors duration-200">
+                <Upload className="size-8" />
+              </div>
+              <div>
+                <p className="font-semibold text-base sm:text-lg text-foreground">Drag & Drop your screenshot here</p>
+                <p className="text-sm sm:text-base text-muted-foreground">or click anywhere in this zone to choose a PNG, JPG, or WebP image</p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <span className="size-2 rounded-full bg-green-500"></span>
+                  Large preview area
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="size-2 rounded-full bg-blue-500"></span>
+                  Click anywhere to browse
+                </span>
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground italic">⚠️ Note: No OCR or auto-data extraction implemented yet. Image is uploaded as-is to storage.</p>
+            </div>
+          )}
+        </label>
+      </div>
+
+      <div className="grid gap-5 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         <div className="space-y-2">
-          <Label htmlFor="tradeDate">Trade date</Label>
-          <Input id="tradeDate" type="date" {...form.register("tradeDate")} />
+          <Label htmlFor="tradeDate" className="text-sm">Trade date</Label>
+          <Input id="tradeDate" type="date" {...form.register("tradeDate")} className="text-sm" />
           {form.formState.errors.tradeDate && (
             <p className="text-sm text-loss">{form.formState.errors.tradeDate.message}</p>
           )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="accountId">Account</Label>
-          <Select value={form.watch("accountId")} onValueChange={(value) => form.setValue("accountId", value)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select account" />
-            </SelectTrigger>
-            <SelectContent>
-              {accounts.map((account) => (
-                <SelectItem key={account.id} value={account.id}>
-                  {account.account_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {form.formState.errors.accountId && (
-            <p className="text-sm text-loss">{form.formState.errors.accountId.message}</p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="tradeType">Trade type</Label>
-          <Select
-            value={form.watch("tradeType")}
-            onValueChange={(value) => form.setValue("tradeType", value as "BUY" | "SELL")}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="BUY">BUY</SelectItem>
-              <SelectItem value="SELL">SELL</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="instrument">Instrument</Label>
-          <div className="flex gap-2">
-            <Select value={form.watch("instrument")} onValueChange={(value) => form.setValue("instrument", value)}>
+          <Label htmlFor="instrument" className="text-sm">Instrument</Label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Select value={instrument ?? ""} onValueChange={(value) => form.setValue("instrument", value)}>
               <SelectTrigger>
                 <SelectValue placeholder="Select instrument" />
               </SelectTrigger>
@@ -219,6 +381,7 @@ export function TradeForm({ accounts }: TradeFormProps) {
             value={customInstrument}
             onChange={(event) => setCustomInstrument(event.target.value.toUpperCase())}
             placeholder="Add new"
+            className="text-sm"
           />
           {form.formState.errors.instrument && (
             <p className="text-sm text-loss">{form.formState.errors.instrument.message}</p>
@@ -226,12 +389,29 @@ export function TradeForm({ accounts }: TradeFormProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="entryPrice">Entry price</Label>
+          <Label htmlFor="tradeType" className="text-sm">Trade type</Label>
+          <Select
+            value={tradeType}
+            onValueChange={(value) => form.setValue("tradeType", value as "BUY" | "SELL")}
+          >
+            <SelectTrigger className="text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="BUY">BUY</SelectItem>
+              <SelectItem value="SELL">SELL</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="entryPrice" className="text-sm">Entry price</Label>
           <Input
             id="entryPrice"
             type="number"
             step="0.000001"
             {...form.register("entryPrice", { valueAsNumber: true })}
+            className="text-sm"
           />
           {form.formState.errors.entryPrice && (
             <p className="text-sm text-loss">{form.formState.errors.entryPrice.message}</p>
@@ -239,25 +419,40 @@ export function TradeForm({ accounts }: TradeFormProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="exitPrice">Exit price</Label>
+          <Label htmlFor="exitPrice" className="text-sm">Exit price</Label>
           <Input
             id="exitPrice"
             type="number"
             step="0.000001"
             {...form.register("exitPrice", { valueAsNumber: true })}
+            className="text-sm"
           />
           {form.formState.errors.exitPrice && (
             <p className="text-sm text-loss">{form.formState.errors.exitPrice.message}</p>
           )}
         </div>
 
+        <div className="md:col-span-2 space-y-2">
+          <Label htmlFor="notes" className="text-sm">Notes</Label>
+          <Textarea
+            id="notes"
+            placeholder="Setup, execution notes, market context..."
+            {...form.register("notes")}
+            className="text-sm"
+          />
+          {form.formState.errors.notes && (
+            <p className="text-sm text-loss">{form.formState.errors.notes.message}</p>
+          )}
+        </div>
+
         <div className="space-y-2">
-          <Label htmlFor="lotSize">Lot size</Label>
+          <Label htmlFor="lotSize" className="text-sm">Lot size</Label>
           <Input
             id="lotSize"
             type="number"
             step="0.000001"
             {...form.register("lotSize", { valueAsNumber: true })}
+            className="text-sm"
           />
           {form.formState.errors.lotSize && (
             <p className="text-sm text-loss">{form.formState.errors.lotSize.message}</p>
@@ -265,12 +460,13 @@ export function TradeForm({ accounts }: TradeFormProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="stopLoss">Stop loss</Label>
+          <Label htmlFor="stopLoss" className="text-sm">Stop loss</Label>
           <Input
             id="stopLoss"
             type="number"
             step="0.000001"
             {...form.register("stopLoss", { valueAsNumber: true })}
+            className="text-sm"
           />
           {form.formState.errors.stopLoss && (
             <p className="text-sm text-loss">{form.formState.errors.stopLoss.message}</p>
@@ -278,82 +474,57 @@ export function TradeForm({ accounts }: TradeFormProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="takeProfit">Take profit</Label>
+          <Label htmlFor="takeProfit" className="text-sm">Take profit</Label>
           <Input
             id="takeProfit"
             type="number"
             step="0.000001"
             {...form.register("takeProfit", { valueAsNumber: true })}
+            className="text-sm"
           />
           {form.formState.errors.takeProfit && (
             <p className="text-sm text-loss">{form.formState.errors.takeProfit.message}</p>
           )}
         </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="screenshot">Screenshot</Label>
-          <Input
-            id="screenshot"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            onChange={async (event) => {
-              const file = event.target.files?.[0];
-              if (!file) {
-                return;
-              }
-
-              setIsUploading(true);
-              setError(null);
-
-              try {
-                await uploadScreenshot(file);
-                setScreenshotName(file.name);
-              } catch (uploadError) {
-                setError(uploadError instanceof Error ? uploadError.message : "Screenshot upload failed.");
-              } finally {
-                setIsUploading(false);
-              }
-            }}
-          />
-          {screenshotName && (
-            <Badge variant="secondary" className="mt-2">
-              {screenshotName}
-            </Badge>
-          )}
-        </div>
-
-        <div className="md:col-span-2 space-y-2">
-          <Label htmlFor="notes">Notes</Label>
-          <Textarea
-            id="notes"
-            placeholder="Setup, execution notes, market context..."
-            {...form.register("notes")}
-          />
-          {form.formState.errors.notes && (
-            <p className="text-sm text-loss">{form.formState.errors.notes.message}</p>
-          )}
-        </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-surface-raised p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="grid gap-5 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-lg border border-border bg-surface-raised p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground">Live P/L preview</p>
+              <p className="tabular-finance text-xl font-semibold text-gold-bright sm:text-2xl">
+                {liveProfitLoss === null ? "—" : formatCurrency(liveProfitLoss)}
+              </p>
+            </div>
+            {isUsingDefaultMultiplier(instrument) && (
+              <p className="text-[10px] text-muted-foreground hidden sm:block">Using default forex multiplier — verify for this instrument</p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface-raised p-4">
           <div>
-            <p className="text-sm text-muted-foreground">Live risk/reward</p>
-            <p className="tabular-finance text-2xl font-semibold text-gold-bright">
-              {riskReward === null ? "—" : `${riskReward.toFixed(2)}R`}
+            <p className="text-xs text-muted-foreground">Live risk/reward</p>
+            <p className="tabular-finance text-xl font-semibold text-gold-bright sm:text-2xl">
+              {riskRewardPreview === null ? "—" : `${riskRewardPreview.riskReward.toFixed(2)}R`}
             </p>
           </div>
-          <div className="text-sm text-muted-foreground">
-            Formula: BUY {(watch.takeProfit ?? 0)} − entry ÷ entry − SL · SELL inverse
-          </div>
         </div>
       </div>
 
-      {error && <p className="rounded-md border border-loss-muted/40 bg-loss-muted/10 p-3 text-sm text-loss">{error}</p>}
+      {error && <p className="rounded-md border border-loss-muted/40 bg-loss-muted/10 p-3 text-xs sm:text-sm text-loss">{error}</p>}
 
-      <Button type="submit" disabled={isPending || isUploading || accounts.length === 0}>
+      <Button type="submit" disabled={isPending || isUploading || accounts.length === 0} className="w-full sm:w-auto text-sm">
         {isPending ? "Saving trade..." : isUploading ? "Uploading screenshot..." : "Log trade"}
       </Button>
     </form>
   );
+}
+
+function cnDropzone(isDragging: boolean) {
+  return [
+    "mt-3 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed bg-[#0B0E11] p-4 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B0E11]",
+    isDragging ? "border-gold-bright bg-gold/10" : "border-border hover:border-gold/70 hover:bg-gold/5",
+  ].join(" ");
 }

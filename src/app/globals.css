@@ -78,6 +78,7 @@
 html {
   height: 100%;
   background-color: #0B0E11;
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -85,9 +86,118 @@ body {
   background-color: #0B0E11;
   color: hsl(var(--foreground));
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background-color: rgba(212, 175, 55, 0.28);
+  color: #fff;
+}
+
+/* Custom scrollbar — subtle, terminal-feel */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.18);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 175, 55, 0.35);
+  background-clip: content-box;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(212, 175, 55, 0.25) transparent;
 }
 
 .tabular-finance {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+/* Ambient grid backdrop for app surfaces */
+.ambient-grid {
+  background-image:
+    radial-gradient(900px circle at 12% -10%, rgba(212, 175, 55, 0.10), transparent 55%),
+    radial-gradient(800px circle at 100% 0%, rgba(240, 180, 41, 0.06), transparent 50%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 44px 44px, 44px 44px;
+}
+
+.ambient-hero {
+  background-image:
+    radial-gradient(1100px circle at 8% -8%, rgba(212, 175, 55, 0.16), transparent 55%),
+    radial-gradient(900px circle at 95% 8%, rgba(240, 180, 41, 0.08), transparent 55%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 46px 46px, 46px 46px;
+}
+
+.text-gradient-gold {
+  background: linear-gradient(180deg, #F6D97A 0%, #D4AF37 55%, #B8942B 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.card-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.card-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(420px circle at var(--x, 50%) var(--y, 0%), rgba(212, 175, 55, 0.08), transparent 45%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+.card-sheen:hover::after {
+  opacity: 1;
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 0.4s ease both;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
 }

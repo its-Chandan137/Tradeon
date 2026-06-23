@@ -35,6 +35,7 @@ export async function createTrade(values: TradeFormValues) {
     entryPrice: result.data.entryPrice,
     exitPrice: result.data.exitPrice,
     lotSize: result.data.lotSize,
+    instrument: result.data.instrument,
   });
 
   const { error } = await supabase.from("trades").insert({

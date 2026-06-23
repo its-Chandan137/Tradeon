@@ -21,20 +21,21 @@ interface TradeForEquity {
 
 export function EquityCurveChart({ trades }: { trades: TradeForEquity[] }) {
   const data = useMemo(() => {
-    let running = 0;
-
     return trades
       .slice()
       .sort((a, b) => new Date(a.trade_date).getTime() - new Date(b.trade_date).getTime())
-      .map((trade, index) => {
-        running += Number(trade.profit_loss ?? 0);
+      .reduce((rows: Array<{ index: number; date: string; equity: number }>, trade, index) => {
+        const previousEquity = rows[index - 1]?.equity ?? 0;
+        const equity = previousEquity + Number(trade.profit_loss ?? 0);
 
-        return {
+        rows.push({
           index: index + 1,
           date: new Date(trade.trade_date).toLocaleDateString(),
-          equity: running,
-        };
-      });
+          equity,
+        });
+
+        return rows;
+      }, []);
   }, [trades]);
 
   return (

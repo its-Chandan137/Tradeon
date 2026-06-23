@@ -51,15 +51,17 @@ export function AccountTable({ accounts }: AccountTableProps) {
 
   return (
     <>
-      <Table>
+      <div className="relative overflow-x-auto rounded-lg border border-border">
+        <div className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-12 bg-gradient-to-l from-[#0B0E11] to-transparent md:w-8" />
+        <Table className="min-w-[600px] sm:min-w-[720px]">
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Phase</TableHead>
-            <TableHead className="text-right">Starting</TableHead>
-            <TableHead className="text-right">Current</TableHead>
-            <TableHead className="text-right">Target</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead className="text-xs">Name</TableHead>
+            <TableHead className="text-xs">Phase</TableHead>
+            <TableHead className="text-right text-xs">Starting</TableHead>
+            <TableHead className="text-right text-xs">Current</TableHead>
+            <TableHead className="text-right text-xs">Target</TableHead>
+            <TableHead className="text-right text-xs">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -72,17 +74,17 @@ export function AccountTable({ accounts }: AccountTableProps) {
           ) : (
             accounts.map((account) => (
               <TableRow key={account.id}>
-                <TableCell className="font-medium text-foreground">{account.account_name}</TableCell>
+                <TableCell className="font-medium text-foreground text-xs sm:text-sm">{account.account_name}</TableCell>
                 <TableCell>
-                  <Badge variant="secondary">{account.phase}</Badge>
+                  <Badge variant="secondary" className="text-xs">{account.phase}</Badge>
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right text-xs sm:text-sm">
                   <FinancialValue value={account.starting_balance} />
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right text-xs sm:text-sm">
                   <FinancialValue value={account.current_balance} />
                 </TableCell>
-                <TableCell className="text-right text-gold-bright">
+                <TableCell className="text-right text-gold-bright text-xs sm:text-sm">
                   <FinancialValue value={account.profit_target} />
                 </TableCell>
                 <TableCell className="flex justify-end gap-2">
@@ -119,7 +121,8 @@ export function AccountTable({ accounts }: AccountTableProps) {
             ))
           )}
         </TableBody>
-      </Table>
+        </Table>
+      </div>
     </>
   );
 }
